@@ -11,6 +11,8 @@ import eventlet.wsgi
 from PIL import Image
 from flask import Flask
 from io import BytesIO
+import math
+import cv2
 
 from keras.models import load_model
 import h5py
@@ -60,7 +62,11 @@ def telemetry(sid, data):
         # The current image from the center camera of the car
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
-        image_array = np.asarray(image)
+        image_array = np.asarray(image)                                                   ##### NEW LINES ADDED BELOW
+        #image_array = image_array[math.floor(image_array.shape[0] * 0.4):                    
+        #                          (image_array.shape[0]-35), 0:image_array.shape[1]]                 
+        #image_array = cv2.resize(image_array, (64,64), interpolation = cv2.INTER_AREA)
+        ## image_array = image_array/255.0-0.5                                             ##### END OF NEW LINES
         steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))

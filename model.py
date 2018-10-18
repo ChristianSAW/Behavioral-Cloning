@@ -15,10 +15,11 @@ from keras.layers.core import Dense, Dropout, Activation,Lambda
 from keras.layers import ELU
 from keras.optimizers import Adam
 from keras.layers import Conv2D, MaxPooling2D, Flatten
+from keras.callbacks import ModelCheckpoint
 import time
 
 ### LOADING IN AND READING DATA:
-dataPath = '/opt/carmd_p3/data/driving_log.csv'
+dataPath = '../udacity-track1-data/driving_log.csv'
 
 ### Read CSV File
 # Read Data from CSV File
@@ -39,7 +40,7 @@ def getImg(path):
 # Edit the path for reading the images in the right directory
 def getPath(local_path):
     filename = local_path.split("/")[-1]
-    host_path = '/opt/carmd_p3/data/IMG/'+filename
+    host_path = '../udacity-track1-data/IMG/'+filename
     # print(host_path)
     return host_path
 
@@ -342,7 +343,6 @@ def model1():
     model.add(Activation('relu'))                              # Activation: RELU
     model.add(MaxPooling2D(pool_size=pooling_size))            # Pooling
     model.add(Dropout(dropout_keep_prob))                      # Dropout
-    
     # Flatten
     model.add(Flatten())
     
@@ -371,21 +371,48 @@ def model1():
     model.add(Dense(fc_out_4,
                    name=name_fc4,
                    kernel_initializer='he_normal'))
+    return model
+
+# Use a Model you know that works to test the rest of your training pipeline and see if there is a problem somewhere
+def model2a():
+    ## GENERAL PARAMETERS:
+    new_row = 64
+    new_col = 64
+    channels = 3
+    input_shape = (new_row, new_col, channels)
+    pooling_size = (2,2)
+    dropout_keep_prob = 0.5
     
+    ## PIPELINE 
+    model = Sequential()
+    model.add(Lambda(lambda x: x/255.0 - 0.5,input_shape=input_shape,output_shape=input_shape))
+    model.add(Conv2D(36, (5, 5), name='conv2'))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2,2)))
+    model.add(Conv2D(48, (3, 3), name='conv5', padding='valid'))
+    model.add(Flatten())
+    model.add(Dense(100, name="hidden1", kernel_initializer="he_normal"))
+    model.add(ELU())
+    model.add(Dropout(0.5))
+    model.add(Dense(50,name='hidden2', kernel_initializer="he_normal"))
+    model.add(ELU())
+    model.add(Dense(10,name='hidden3',kernel_initializer="he_normal"))
+    model.add(ELU())
+    model.add(Dense(1, name='output', kernel_initializer="he_normal"))
     return model
 
 ## HYPERPARAMETERS 
-batch_size = 32
-EPOCH = 5
-EPOCH_inner = 1                             # EPOCH between parameter/hyper parameter changes. 
+batch_size = 256
+EPOCH = 8
+EPOCH_inner = 10                            # EPOCH between parameter/hyper parameter changes. 
 beta = 0.00005                              # L2 Regularization scaling factor
-learning_rate = 0.001
+learning_rate = 0.0001
 
 ## PARAMETERS
 best_EPOCH = 0                              # Keeping Track of Best Epoch
 best_valid_loss = 100                       # Arbitrarily High Validation Loss 
-use_brightness = True
-use_translation = True 
+use_brightness = False
+use_translation = False 
 trans_range = 80
 pr_keep = 0.75
 
@@ -395,7 +422,7 @@ train_size = len(train_list)
 valid_size = len(valid_list)
 
 ## Optimizer
-model = model1()                            # CHANGE THIS FOR TRAINING DIFFERENT MODELS
+model = model2a()                            # CHANGE THIS FOR TRAINING DIFFERENT MODELS
 adam = Adam(lr=learning_rate)
 model.compile(optimizer=adam,
              loss='mse')
@@ -408,48 +435,84 @@ if not changeParam:
                                            trans_range, batch_size)
 
 ## BEGIN TRAINING 
+model1 = False
+model2 = True
+
 # Loop Through Each EPOCH and train. 
 # Each EPOCH is basically retraining with initialization of weights and parameters from the previous EPOCH
-version = 'a'
+if model1:
+    # Loop Through Each EPOCH and train. 
+    # Each EPOCH is basically retraining with initialization of weights and parameters from the previous EPOCH
+    version = 'b'
+    print("Training...")
+    print()
 
-print("Training...")
-print()
+    start_time = time.time()           # time training
+    for i_EPOCH in range(EPOCH):
+        if changeParam:
+            train_generator = generate_train_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
+                                                   trans_range, (int(batch_size/2))) # do you need to divide? Check
+    
+        num_steps_train = np.round(len(train_list)/(batch_size))
+        num_steps_valid = np.round(len(valid_list)/(batch_size)) # Should be able to just have as 1 bc each batch is entire validation set
+    
+        # Record history when training to plot later 
+        history_object = model.fit_generator(train_generator,
+                                             steps_per_epoch = num_steps_train,
+                                             epochs = EPOCH_inner,
+                                             verbose = 1,
+                                             callbacks = None,
+                                             validation_data = valid_generator,
+                                             validation_steps = num_steps_valid)
+        # Check for best EPOCH
+        print('Got To Validation Loss Check')
+        valid_loss = history_object.history['val_loss'][0]
+    
+        if (valid_loss < best_valid_loss):
+        
+            # Update Best EPOCH/Loss
+            best_EPOCH = i_EPOCH
+            best_valid_loss = valid_loss
+        
+            # Save Best EPOCH
+            saveName = 'model1_' + str(version) + '_EPOCH_' + str(i_EPOCH+1) + '.h5'
+            model.save(saveName)
+            
+        # Update Parameters 
+        if changeParam:
+            # Update keep probability for low steering value files
+            pr_keep = 1/(i_EPOCH+1)
+        
+    end_time = time.time()
+    time_diff = end_time - start_time
+    print("Total training Time: ", np.round(time_diff,2), "s")
 
-start_time = time.time()           # time training
-
-for i_EPOCH in range(EPOCH):
-    if changeParam:        
-        train_generator = generate_train_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
-                                               trans_range, (int(batch_size/2))) # do you need to divide? Check
+if model2:
+    # Loop Through Each EPOCH and train. 
+    # Each EPOCH is basically retraining with initialization of weights and parameters from the previous EPOCH
+    print("Training...")
+    print()
+    start_time = time.time()           # time training
+    ### INSERT CODE HERE
+    checkpoint = ModelCheckpoint('model2a_PY_{epoch:03d}.h5',
+                                 monitor='val_loss',
+                                 verbose=0,
+                                 save_best_only=True,
+                                 mode='auto')
     
     num_steps_train = np.round(len(train_list)/(batch_size))
-    num_steps_valid = np.round(len(valid_list)/(batch_size)) # Should be able to just have as 1 bc each batch is entire validation set
-    
+    #num_steps_valid = np.round(len(valid_list)/(batch_size)) # Should be able to just have as 1 bc each batch is entire validation set
+    num_steps_valid = 1
+
     # Record history when training to plot later 
     history_object = model.fit_generator(train_generator,
                                          steps_per_epoch = num_steps_train,
                                          epochs = EPOCH_inner,
                                          verbose = 1,
-                                         callbacks = None,
+                                         callbacks = [checkpoint],
                                          validation_data = valid_generator,
                                          validation_steps = num_steps_valid)
-    # Check for best EPOCH
-    print('Got To Validation Loss Check')
-    valid_loss = history_object.history['val_loss'][0]
-    
-    if (valid_loss < best_valid_loss):
-        # Update Best EPOCH/Loss
-        best_EPOCH = i_EPOCH
-        best_valid_loss = valid_loss
-        # Save Best EPOCH
-        saveName = 'model1_PY_' + str(version) + '_EPOCH_' + str(i_EPOCH+1) + '.h5'
-        model.save(saveName)
-    
-    # Update Parameters 
-    if changeParam:
-        # Update keep probability for low steering value files
-        pr_keep = 1/(i_EPOCH+1)
-        
-end_time = time.time()
-time_diff = end_time - start_time
-print("Total training Time: ", np.round(time_diff,2), "s")
+    ### END OF TRAINING CODE
+    end_time = time.time()
+    time_diff = end_time - start_time
+    print("Total training Time: ", np.round(time_diff,2), "s")

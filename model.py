@@ -237,6 +237,50 @@ def generate_train_batch(data, train_list, pr_keep, use_brightness, use_translat
             batch_steering[(2*i_batch)+1] = y2
             
             yield batch_img, batch_steering
+            
+# Note that the number of images within the batch will be double of the batch size input because 2 images are pulled
+# for each frame
+def generate_train_1img_batch(data, train_list, pr_keep, use_brightness, use_translation, trans_range, batch_size = 32):
+    new_row = 64
+    new_col = 64
+    thresh = 0.15
+    
+    batch_size_n = int(np.round(2*batch_size))
+    # Create placeholder outputs (np Arrays)
+    batch_img = np.zeros((batch_size_n, new_row, new_col,3))
+    batch_steering = np.zeros(batch_size_n)
+    
+    # Start infinate loop
+    while 1:
+        # Shuffle list each time batch is called
+        shuffle(train_list)
+        for i_batch in range(batch_size_n):
+            cont = True
+            # Continue Loop Until Pick Values Which Work:
+            while cont:
+                # Get Random data_row from training list
+                i = np.random.randint(len(train_list))                # Pull Index from List
+                index_train = train_list[i]                           # Get data_row with pulled index 
+                data_row = data.iloc[[index_train]].reset_index()
+   
+                # Process Images 
+                x1, x2, y1, y2 = process_train_img(data_row, use_brightness, use_translation, trans_range)
+                
+                # Generate random num and check if steering values are above threshold. 
+                randVal = np.random.uniform()
+                if (abs(float(y1)) < thresh):
+                    # if randVal is above probability thresh, throw away selection
+                    if randVal > pr_keep:                                      
+                        cont = True 
+                    else:
+                        cont = False
+                else:
+                    cont = False 
+            # Add images and steering values to batch
+            batch_img[i_batch] = x1
+            batch_steering[i_batch] = y1
+            
+            yield batch_img, batch_steering
 
 def generate_valid(data, valid_list):
     new_row = 64
@@ -264,6 +308,32 @@ def generate_valid(data, valid_list):
             
         yield valid_img, valid_steering
 
+def generate_valid_batch(data, batch_size, valid_list):
+    new_row = 64
+    new_col = 64
+    
+    # Create placeholder outputs (np Arrays)
+    valid_img = np.zeros((batch_size, new_row, new_col,3))
+    valid_steering = np.zeros(batch_size)
+    
+    # Shuffle list before each training run to not influence anything. 
+    shuffle(valid_list)
+    
+    # Start infinate loop
+    while 1:
+        # Iterate through each valid center image in the data set. 
+        for i in range(batch_size):
+            index_valid = valid_list[i]                              # Pull Index from List
+            data_row = data.iloc[[index_valid]].reset_index()        # Get data_row with pulled index 
+            x, y = process_predict_img(data_row)
+            
+            #x = x.reshape(1, x.shape[0], x.shape[1], x.shape[2])
+            #y = np.array([[y]])
+            valid_img[i] = x
+            valid_steering[i] = y
+            
+        yield valid_img, valid_steering
+        
 ## TRAINING 
 def model1():  
     
@@ -411,8 +481,8 @@ learning_rate = 0.0001
 ## PARAMETERS
 best_EPOCH = 0                              # Keeping Track of Best Epoch
 best_valid_loss = 100                       # Arbitrarily High Validation Loss 
-use_brightness = False
-use_translation = False 
+use_brightness = True
+use_translation = True 
 trans_range = 80
 pr_keep = 0.75
 
@@ -428,11 +498,22 @@ model.compile(optimizer=adam,
              loss='mse')
 
 ## Generator
-changeParam = True
-valid_generator = generate_valid(data_full, valid_list)
+changeParam = False
+useValidBatch = True 
+useSingleImg_Train = False
+
+if useValidBatch:
+    valid_generator = generate_valid_batch(data_full, batch_size, valid_list)
+else:
+    valid_generator = generate_valid(data_full, valid_list)
+
 if not changeParam:
-    train_generator = generate_train_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
-                                           trans_range, batch_size)
+    if useSingleImg_Train:
+        train_generator = generate_train_1img_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
+                                                    trans_range, batch_size)
+    else:
+        train_generator = generate_train_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
+                                               trans_range, batch_size)
 
 ## BEGIN TRAINING 
 model1 = False
@@ -449,9 +530,13 @@ if model1:
 
     start_time = time.time()           # time training
     for i_EPOCH in range(EPOCH):
-        if changeParam:
-            train_generator = generate_train_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
-                                                   trans_range, (int(batch_size/2))) # do you need to divide? Check
+        if not changeParam:
+            if useSingleImg_Train:
+                train_generator = generate_train_1img_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
+                                                            trans_range, batch_size)
+            else:
+                train_generator = generate_train_batch(data_full, train_list, pr_keep, use_brightness, use_translation,
+                                                       trans_range, batch_size)
     
         num_steps_train = np.round(len(train_list)/(batch_size))
         num_steps_valid = np.round(len(valid_list)/(batch_size)) # Should be able to just have as 1 bc each batch is entire validation set
@@ -490,19 +575,29 @@ if model1:
 if model2:
     # Loop Through Each EPOCH and train. 
     # Each EPOCH is basically retraining with initialization of weights and parameters from the previous EPOCH
+    modelNum = '2'
+    version = 'c'
     print("Training...")
     print()
     start_time = time.time()           # time training
+    
     ### INSERT CODE HERE
-    checkpoint = ModelCheckpoint('model2a_PY_{epoch:03d}.h5',
+    saveName = 'model' + str(modelNum) + str(version) + '_{epoch:03d}.h5'
+    saveName2 = 'model' + str(modelNum) + str(version) + '_' + str(EPOCH_inner) + '.h5'
+    checkpoint = ModelCheckpoint(saveName,
                                  monitor='val_loss',
                                  verbose=0,
                                  save_best_only=True,
                                  mode='auto')
     
     num_steps_train = np.round(len(train_list)/(batch_size))
-    #num_steps_valid = np.round(len(valid_list)/(batch_size)) # Should be able to just have as 1 bc each batch is entire validation set
-    num_steps_valid = 1
+    #num_steps_train = len(train_list)
+
+    if useValidBatch:
+        num_steps_valid = np.round(len(valid_list)/(batch_size)) 
+    else:
+        num_steps_valid = 1
+    #num_steps_valid = len(valid_list)
 
     # Record history when training to plot later 
     history_object = model.fit_generator(train_generator,
@@ -512,6 +607,7 @@ if model2:
                                          callbacks = [checkpoint],
                                          validation_data = valid_generator,
                                          validation_steps = num_steps_valid)
+    model.save(saveName2)
     ### END OF TRAINING CODE
     end_time = time.time()
     time_diff = end_time - start_time

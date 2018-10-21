@@ -236,7 +236,7 @@ def generate_train_batch(data, train_list, pr_keep, use_brightness, use_translat
             batch_steering[(2*i_batch)] = y1
             batch_steering[(2*i_batch)+1] = y2
             
-            yield batch_img, batch_steering
+        yield batch_img, batch_steering
             
 # Note that the number of images within the batch will be double of the batch size input because 2 images are pulled
 # for each frame
@@ -280,7 +280,7 @@ def generate_train_1img_batch(data, train_list, pr_keep, use_brightness, use_tra
             batch_img[i_batch] = x1
             batch_steering[i_batch] = y1
             
-            yield batch_img, batch_steering
+        yield batch_img, batch_steering
 
 def generate_valid(data, valid_list):
     new_row = 64
@@ -355,7 +355,7 @@ def model1():
     filter_num_1 = 32
     name_conv1 = 'conv1'
     # Layer 2: Convolutional
-    filter_size_2 = 5
+    filter_size_2 = 3
     filter_num_2 = 64
     name_conv2 = 'conv2' 
     # Layer 3: Convolutional
@@ -388,7 +388,7 @@ def model1():
                      name = name_conv0))
     model.add(Activation('relu'))                              # Activation: RELU
     model.add(MaxPooling2D(pool_size=pooling_size))            # Pooling
-    model.add(Dropout(dropout_keep_prob))                      # Dropout
+    #model.add(Dropout(dropout_keep_prob))                      # Dropout
     
     # Layer 1: Convolutional
     model.add(Conv2D(filter_num_1,
@@ -396,7 +396,7 @@ def model1():
                      name = name_conv1))
     model.add(Activation('relu'))                              # Activation: RELU
     model.add(MaxPooling2D(pool_size=pooling_size))            # Pooling
-    model.add(Dropout(dropout_keep_prob))                      # Dropout
+    #model.add(Dropout(dropout_keep_prob))                      # Dropout
     
     # Layer 2: Convolutional
     model.add(Conv2D(filter_num_2,
@@ -404,7 +404,7 @@ def model1():
                      name = name_conv2))
     model.add(Activation('relu'))                              # Activation: RELU
     model.add(MaxPooling2D(pool_size=pooling_size))            # Pooling
-    model.add(Dropout(dropout_keep_prob))                      # Dropout
+    #model.add(Dropout(dropout_keep_prob))                      # Dropout
     
     # Layer 3: Convolutional
     model.add(Conv2D(filter_num_3,
@@ -412,7 +412,7 @@ def model1():
                      name = name_conv3))
     model.add(Activation('relu'))                              # Activation: RELU
     model.add(MaxPooling2D(pool_size=pooling_size))            # Pooling
-    model.add(Dropout(dropout_keep_prob))                      # Dropout
+    #model.add(Dropout(dropout_keep_prob))                      # Dropout
     # Flatten
     model.add(Flatten())
     
@@ -428,14 +428,14 @@ def model1():
                    name=name_fc2,
                    kernel_initializer='he_normal'))
     model.add(ELU())                                           # Activation: ELU
-    model.add(Dropout(dropout_keep_prob))                      # Dropout
+    #model.add(Dropout(dropout_keep_prob))                      # Dropout
     
     # Layer 6: Fully Connected
     model.add(Dense(fc_out_3,
                    name=name_fc3,
                    kernel_initializer='he_normal'))
     model.add(ELU())                                           # Activation: ELU
-    model.add(Dropout(dropout_keep_prob))                      # Dropout
+    #model.add(Dropout(dropout_keep_prob))                      # Dropout
 
     # Layer 7: Fully Connected (OUTPUT SIZE = 1)
     model.add(Dense(fc_out_4,
@@ -443,38 +443,10 @@ def model1():
                    kernel_initializer='he_normal'))
     return model
 
-# Use a Model you know that works to test the rest of your training pipeline and see if there is a problem somewhere
-def model2a():
-    ## GENERAL PARAMETERS:
-    new_row = 64
-    new_col = 64
-    channels = 3
-    input_shape = (new_row, new_col, channels)
-    pooling_size = (2,2)
-    dropout_keep_prob = 0.5
-    
-    ## PIPELINE 
-    model = Sequential()
-    model.add(Lambda(lambda x: x/255.0 - 0.5,input_shape=input_shape,output_shape=input_shape))
-    model.add(Conv2D(36, (5, 5), name='conv2'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2,2)))
-    model.add(Conv2D(48, (3, 3), name='conv5', padding='valid'))
-    model.add(Flatten())
-    model.add(Dense(100, name="hidden1", kernel_initializer="he_normal"))
-    model.add(ELU())
-    model.add(Dropout(0.5))
-    model.add(Dense(50,name='hidden2', kernel_initializer="he_normal"))
-    model.add(ELU())
-    model.add(Dense(10,name='hidden3',kernel_initializer="he_normal"))
-    model.add(ELU())
-    model.add(Dense(1, name='output', kernel_initializer="he_normal"))
-    return model
-
 ## HYPERPARAMETERS 
 batch_size = 256
 EPOCH = 8
-EPOCH_inner = 10                            # EPOCH between parameter/hyper parameter changes. 
+EPOCH_inner = 8                             # EPOCH between parameter/hyper parameter changes. 
 beta = 0.00005                              # L2 Regularization scaling factor
 learning_rate = 0.0001
 
@@ -484,7 +456,7 @@ best_valid_loss = 100                       # Arbitrarily High Validation Loss
 use_brightness = True
 use_translation = True 
 trans_range = 80
-pr_keep = 0.75
+pr_keep = 0.5                               # [0.75]
 
 ## Training Data:
 train_size = len(train_list)
@@ -492,8 +464,9 @@ train_size = len(train_list)
 valid_size = len(valid_list)
 
 ## Optimizer
-model = model2a()                            # CHANGE THIS FOR TRAINING DIFFERENT MODELS
+model = model1()                            # CHANGE THIS FOR TRAINING DIFFERENT MODELS
 adam = Adam(lr=learning_rate)
+#adam = Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.96)
 model.compile(optimizer=adam,
              loss='mse')
 
@@ -516,11 +489,12 @@ if not changeParam:
                                                trans_range, batch_size)
 
 ## BEGIN TRAINING 
-model1 = False
-model2 = True
+trainV1 = False
+trainV2 = True
 
 # Loop Through Each EPOCH and train. 
 # Each EPOCH is basically retraining with initialization of weights and parameters from the previous EPOCH
+# Credit to Vivik Yadav for this approach. I end up finding another method of training to work better however. 
 if model1:
     # Loop Through Each EPOCH and train. 
     # Each EPOCH is basically retraining with initialization of weights and parameters from the previous EPOCH
@@ -575,15 +549,15 @@ if model1:
 if model2:
     # Loop Through Each EPOCH and train. 
     # Each EPOCH is basically retraining with initialization of weights and parameters from the previous EPOCH
-    modelNum = '2'
-    version = 'c'
+    modelNum = '1'
+    version = 'versionName'
     print("Training...")
     print()
     start_time = time.time()           # time training
     
     ### INSERT CODE HERE
-    saveName = 'model' + str(modelNum) + str(version) + '_{epoch:03d}.h5'
-    saveName2 = 'model' + str(modelNum) + str(version) + '_' + str(EPOCH_inner) + '.h5'
+    saveName = 'model' + str(modelNum) + str(version) + '_PY_{epoch:03d}.h5'
+    saveName2 = 'model' + str(modelNum) + str(version) + '_PY_' + str(EPOCH_inner) + '.h5'
     checkpoint = ModelCheckpoint(saveName,
                                  monitor='val_loss',
                                  verbose=0,

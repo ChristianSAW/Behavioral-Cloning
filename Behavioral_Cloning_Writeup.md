@@ -184,7 +184,7 @@ The final model archetecture is as follows:
 
 #### 3. Creation of the Training Set & Training Process
 
-I initially tried to capture my own data. Unfortunately, I could not gather good data as I struggled to control the simulator well. So, I stuck with the provided data and seeing that others have been able to sucessfully train a model using just that, I knew I could too.
+I initially tried to capture my own data. Unfortunately, I could not gather good data as I struggled to control the simulator well. So, I stuck with the provided data and seeing that others have been able to sucessfully train a model using just that, I knew I could too. The given training data was focused on keeping the car at the center of the track. 
 
 Before I completed any data processing, I did some analysis of my data. 
 
